@@ -50,7 +50,7 @@ int main(int argc, char**argv)
     ifstream inputfile;
     char c;
     string line;
-    inputfile.open("/Users/Michael/Desktop/cs118/initialize.txt");
+    inputfile.open("initialize.txt");
     if(!inputfile)
     {
         cout << "An error occurered while attem[ting to open the file\n";
@@ -76,61 +76,31 @@ int main(int argc, char**argv)
                 break;
             }
         }
-        int length_of_line = line.length();
-        string source_name, destination_name, s_source_port, s_cost;
-        int source_port, cost, field;
-        field = 0;
-        for(int i = 0; i < length_of_line; i++)
-        {
-            if(line[i] == ',')
-            {
-                field++;
-                i++;
-            }
-            switch(field)
-            {
-                case 0:
-                {
-                    source_name += line[i];
-                    break;
-                }
-                case 1:
-                {
-                    destination_name += line[i];
-                    break;
-                }
-                case 2:
-                {
-                    s_source_port += line[i];
-                    char * copy = new char [s_source_port.length()];
-                    for(int i = 0 ; i < s_source_port.length(); i++)
-                    {
-                        copy[i] = s_source_port[i];
-                    }
-                    source_port = atoi(copy);
-                    delete [] copy;
-                    break;
-                }
-                case 3:
-                {
-                    s_cost += line[i];
-                    char * copy = new char [s_cost.length()];
-                    for(int i = 0 ; i < s_cost.length(); i++)
-                    {
-                        copy[i] = s_cost[i];
-                    }
-                    cost = atoi(copy);
-                    delete [] copy;
-                    break;
-                }
-                default:
-                {
-                    break;
-                }
-            }
-        }
+        int length_of_line = (int)line.length();
+        char *input = new char[length_of_line+1];
         
-        if(source_name == argv[1])
+        strcpy(input,line.c_str());
+        input[length_of_line+1] = '\0';
+        
+        char source_name[16];
+        char destination_name[16];
+        char s_source_port[16];
+        char s_cost[16];
+        int source_port, cost;
+        
+        //        cout << "here -> " << input ;
+        sscanf (input, "%8[^,],%8[^,],%8[^,],%8[^,]", source_name, destination_name, s_source_port, s_cost);
+        source_port = atoi(s_source_port);
+        cost = atoi(s_cost);
+        
+        //        cout << "source name - " << source_name << endl;
+        //        cout << "destination name - " << destination_name << endl;
+        //        cout << "source port - " << source_port << endl;
+        //        cout << "source cost - " << cost<< endl;
+        //        cout << endl;
+        line = "";
+        
+        if(strcmp(source_name, argv[1]) == 0)
         {
             bool b = false;
             for (vector<neighboure>::iterator it = neighborhood.begin(); it != neighborhood.end(); it++) {
@@ -148,7 +118,7 @@ int main(int argc, char**argv)
                 neighborhood.push_back(n);
             }
         }
-        if(destination_name == argv[1])
+        if(strcmp(destination_name, argv[1]) == 0)
         {
             if (neighborhood.empty()) {
                 neighboure n;
