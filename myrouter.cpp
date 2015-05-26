@@ -132,16 +132,46 @@ int main(int argc, char**argv)
         
         if(source_name == argv[1])
         {
-            neighboure n;
-            n.name = destination_name;
-            n.cost = cost;
-            n.port_from_me_to_neighboure = source_port;
-            n.port_from_neighboure_to_me = -1;
-            neighborhood.push_back(n);
+            bool b = false;
+            for (vector<neighboure>::iterator it = neighborhood.begin(); it != neighborhood.end(); it++) {
+                if (it -> name == destination_name) {
+                    it->port_from_me_to_neighboure = source_port;
+                    b = true;
+                }
+            }
+            if (!b) {
+                neighboure n;
+                n.name = destination_name;
+                n.cost = cost;
+                n.port_from_me_to_neighboure = source_port;
+                n.port_from_neighboure_to_me = -1;
+                neighborhood.push_back(n);
+            }
         }
-        
         if(destination_name == argv[1])
         {
+            if (neighborhood.empty()) {
+                neighboure n;
+                n.name = source_name;
+                n.cost = cost;
+                n.port_from_me_to_neighboure = -1;
+                n.port_from_neighboure_to_me = source_port;
+                neighborhood.push_back(n);
+            }
+            bool inTheNeighbor = false;
+            for (vector<neighboure>::iterator it = neighborhood.begin(); it != neighborhood.end(); it++) {
+                if (it -> name == source_name) {
+                    inTheNeighbor = true;
+                }
+            }
+            if (inTheNeighbor == false) {
+                neighboure n;
+                n.name = source_name;
+                n.cost = cost;
+                n.port_from_me_to_neighboure = -1;
+                n.port_from_neighboure_to_me = source_port;
+                neighborhood.push_back(n);
+            }
             for(vector<neighboure>::iterator it = neighborhood.begin();
                 it != neighborhood.end(); it++)
             {
