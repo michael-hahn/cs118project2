@@ -430,7 +430,7 @@ int manager::process_distance_vector(string data)
             src = input;
             // cerr << "The src is: " << src << endl;
         }
-        else if (count % 3 == 1) {  //odd number afterwards = destination
+        else if (count % 2 == 1) {  //odd number afterwards = destination
             destination = input;
             pear ++;
             // cerr << "The destination is: " << destination << endl;
