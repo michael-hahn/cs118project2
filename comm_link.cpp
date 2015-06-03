@@ -49,6 +49,11 @@ int comm_link::get_cost() {
     return this->cost;
 }
 
+int comm_link::get_port()
+{
+    return this->neighbors_port;
+}
+
 //udp comms
 int comm_link::send_distance_vector(const char * msg, int socketfd, vector<string> table_sent) 
 {
