@@ -33,8 +33,14 @@ class manager
         comm_link* get_comm_link(std::string name);
         char* convert_string_to_char(std::string data);
 
+        //find comm_linkf for data delivering
+        comm_link* next_hop(std::string dest_node);
+
         //Make message
         std::string create_message(std::map<std::string,std::pair<std::string,int> > dv_table); 
+
+        //print data
+        int data_path_info(comm_link* next_hop, std::string data);
     private:
         char * main_router;
         std::string main_router_output_file_name;
@@ -48,6 +54,7 @@ class manager
         std::vector<pollfd> sockets_to_poll;
         bool table_has_changed;
         int recommunicate;
+        struct sockaddr_in got_from;
 };
 
 
