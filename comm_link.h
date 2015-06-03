@@ -21,6 +21,7 @@ public:
     //getters
     std::string get_name();
     int get_cost();
+    int get_port();
     //udp comms
     int send_distance_vector(const char * msg, int socketfd, std::vector<std::string> table_sent);
     //random helper functions
