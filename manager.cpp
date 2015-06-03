@@ -39,7 +39,7 @@ manager::manager(char const * file_name, char * main_router)
     inputfile.open(file_name); //open the file + error checking
     if(!inputfile)
     {
-        cout << "An error occurered while attempting to open the file\n";
+        cerr << "An error occurered while attempting to open the file\n";
         exit(1);
     }
 
@@ -139,7 +139,7 @@ manager::manager(char const * file_name, char * main_router)
         line = ""; //reset the line string CHECK: again???
     }
 
-    //next the neighbor
+    //next me
     bzero(&this->my_side, sizeof(this->my_side));
     this->my_side.sin_family = AF_INET;
     this->my_side.sin_addr.s_addr = inet_addr("127.0.0.1"); //since we will be talking on the local host
@@ -257,7 +257,8 @@ string manager::collect_()
 {
     int n;
     char recvline[10000];
-    n=recvfrom(this->my_socketfd,recvline,10000,0,NULL,NULL);
+    socklen_t len = sizeof(this->got_from);
+    n=recvfrom(this->my_socketfd,recvline,10000,0,(struct sockaddr *)&(this->got_from), &len);
     if(n < 0)
     {
         cout << "Error receiving datagram " << endl;
@@ -321,7 +322,7 @@ int manager::communicate()
             return -1;
         }
         //2.Poll
-        for(int j = 0; j < 10; ++j)
+        for(int j = 0; j < 15; ++j)
         {
             pollfd * sockets_to_poll_pointer = &sockets_to_poll[0];
             if(sockets_to_poll_pointer == NULL) //error checking
@@ -361,28 +362,73 @@ int manager::communicate()
                         << "Moving on to a new neighbor" << endl;
                         break;
                     }
-                    //next, let that link instance process the data that just came in
-                    int rv = this->process_distance_vector(data);
-                    if(rv < 0)
+                    if (data[0] == '$')
                     {
-                        cerr << "Something went wrong processing the distance vector...\nMoving on to a new neighbor..." << endl;
-                        break;
-                    }
-                    else if(rv > 0)
-                    {
-                        for(vector<comm_link>::iterator it = this->comm_links.begin(); it !=  this->comm_links.end(); ++it)
+                        string data_dest_node;
+                        if (data[1] == ' ')
                         {
-
-                            cerr << endl << "**************************************************************" << endl; 
-                            cerr << "Table is updated, so we need to rescind all the members..." << endl << "Rescind starts..." << endl;
-                            it->rescind_(table_sent);
-                            cerr << "Table_sent now has the member: " << endl;
-                            for (int i = 0; i < table_sent.size(); ++i) {
-                                cerr << table_sent[i] << " ";
-                            }
-                            cerr << endl << "**************************************************************" << endl; 
+                            cerr << "Wrong format!" << endl;
                         }
-                        cerr << "Rescind finished...The table sent should be empty..." << endl;
+                        else
+                        {
+                            int pos = 1;
+                            while(data[pos] != ' ')
+                            {
+                                data_dest_node += data[pos];
+                                pos++;
+                            }
+                            comm_link* cl;
+                            vector<string> no_use;
+                            cl = next_hop(data_dest_node);
+                            pos++;
+                            string payload;
+                            int data_size = data.length();
+                            for (int i = pos; i < data_size; i++)
+                            {
+                                payload += data[i];
+                            }
+                            int rv = this->data_path_info(cl, payload);
+                            if (rv < 0)
+                            {
+                                cerr << "Printing data failed!" << endl;
+                            }
+                            int size_of_name = strlen(this->main_router);
+                            string string_version_of_name;
+                            for (int i = 0; i < size_of_name; i++)
+                            {
+                                string_version_of_name += this->main_router[i];
+                            }
+                            if (string_version_of_name != data_dest_node)
+                            {
+                                cl->send_distance_vector(data.c_str(), this->my_socketfd, no_use);
+                            }
+                        }
+                    }
+                    else 
+                    {
+                        //next, let that link instance process the data that just came in
+                        int rv = this->process_distance_vector(data);
+                        if(rv < 0)
+                        {
+                            cerr << "Something went wrong processing the distance vector...\nMoving on to a new neighbor..." << endl;
+                            break;
+                        }
+                        else if(rv > 0)
+                        {
+                            for(vector<comm_link>::iterator it = this->comm_links.begin(); it !=  this->comm_links.end(); ++it)
+                            {
+
+                                cerr << endl << "**************************************************************" << endl; 
+                                cerr << "Table is updated, so we need to rescind all the members..." << endl << "Rescind starts..." << endl;
+                                it->rescind_(table_sent);
+                                cerr << "Table_sent now has the member: " << endl;
+                                for (int i = 0; i < table_sent.size(); ++i) {
+                                    cerr << table_sent[i] << " ";
+                                }
+                                cerr << endl << "**************************************************************" << endl; 
+                            }
+                            cerr << "Rescind finished...The table sent should be empty..." << endl;
+                        }
                     }
                 }
             }
@@ -536,4 +582,72 @@ int manager::print_dv_table()
         return -1;
     }
     return 0;
+}
+
+comm_link* manager::next_hop(string dest_node)
+{
+    int size_of_name = strlen(this->main_router);
+    string string_version_of_name;
+    for (int i = 0; i < size_of_name; i++)
+    {
+        string_version_of_name += this->main_router[i];
+    }
+    string next_hop_node;
+    for (map<string, pair<string, int> >::iterator it = this->dv_table.begin(); it != dv_table.end(); ++it)
+    {
+        if (it->first == dest_node)
+        {
+            next_hop_node = it->second.first;
+            break;
+        }
+    }
+    return NULL;
+}
+
+int manager::data_path_info(comm_link* next_hop, string data) 
+{
+    int size_of_name = strlen(this->main_router);
+    string string_version_of_name;
+    for (int i = 0; i < size_of_name; i++)
+    {
+        string_version_of_name += this->main_router[i];
+    }
+    ofstream file_to_print (this->main_router_output_file_name.c_str(), ios::out | ios::app);
+    if(file_to_print.is_open())
+    {
+        string source_node_name;
+        int source_port_number;
+        for (vector<comm_link>::iterator it = comm_links.begin(); it != comm_links.end(); it++)
+        {
+            if (htons(it->get_port()) == this->got_from.sin_port)
+            {
+                source_node_name = it->get_name();
+                source_port_number = it->get_port();
+            }
+        }
+        if (source_node_name == "")
+        {
+            cerr << "Cannot find source node name!" << endl;
+            return -1;
+        }
+        time_t current_time = time(NULL);
+        file_to_print << endl << asctime(localtime(&current_time)) << endl;
+        file_to_print << "Source node is: " << source_node_name << endl;
+        if(next_hop != NULL)
+        {
+          file_to_print << "Destination node is " << next_hop->get_name() << endl;    
+        }
+        else
+        {
+            file_to_print << "Destination node is " <<  string_version_of_name << endl;   
+        }
+        file_to_print << "UDP port in which the packet arrived: " << this->my_port << endl;
+        file_to_print << "UDP source port along which the packet was forwarded: " << source_port_number << endl;
+        if (next_hop == NULL)
+        {
+            file_to_print << data << endl;
+        }
+        return 0;
+    }
+    else return -1;
 }
