@@ -511,7 +511,7 @@ int manager::process_distance_vector(string data)
                 dv_table.insert(pair<string, pair<string,int> >(destination, new_pear));
                 this->table_has_changed = true;
                 // cerr << "Succeed in inserting a new destination node" << endl;
-                print_dv_table();
+                //print_dv_table();
             }    
             else 
             {
@@ -533,7 +533,17 @@ int manager::process_distance_vector(string data)
                     it->second.first = src;
                     it->second.second = new_link_cost;
                     table_has_changed = true;
-                    print_dv_table();
+                    //print_dv_table();
+                }
+                else if (new_link_cost == curr_link_cost)
+                {
+                    if (src < it->second.first)
+                    {
+                        it->second.first = src;
+                        it->second.second = new_link_cost;
+                        table_has_changed = true;
+                        //print_dv_table();
+                    }
                 }
             }
             pear = 0;
@@ -543,7 +553,11 @@ int manager::process_distance_vector(string data)
         }
         count ++;
         input = "";
-    }   
+    } 
+    if (table_has_changed)
+    {
+        print_dv_table();
+    }  
 }
 
 char* manager::convert_string_to_char(string data) 
@@ -599,6 +613,14 @@ comm_link* manager::next_hop(string dest_node)
         {
             next_hop_node = it->second.first;
             break;
+        }
+    }
+    int size_of_vector = this->comm_links.size();
+    for (int i = 0; i < size_of_vector; ++i)
+    {
+        if (comm_links[i].get_name() == next_hop_node)
+        {
+            return &comm_links[i];
         }
     }
     return NULL;
