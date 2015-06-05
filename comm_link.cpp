@@ -57,14 +57,20 @@ int comm_link::get_port()
 //udp comms
 int comm_link::send_distance_vector(const char * msg, int socketfd, vector<string> table_sent) 
 {
-    cout << this->name << " wants to send a vector...\n";
+    string the_msg;
+    int msg_len = strlen(msg);
+    for(int i = 0; i < msg_len; i++)
+    {
+        the_msg += msg[i];
+    }
+    cout << "\n\n###########\nTrying to send -->" << the_msg << "<-- to: " << this->name << "\n###################" << endl << endl;
     int ts_length = table_sent.size();
     for (int i = 0; i < ts_length; ++i)
     {
         if(table_sent[i] == this->name)
         {
-            cout << this->name << " match found...\n";
-            return 0;
+            cerr << "\n\n&&&&&&&&&&\nNot sending to "<< this->name << " because a match was found on the provided vector\n&&&&&&&&&&&&\n\n";
+            return 1;
         }
     }
 
@@ -74,7 +80,7 @@ int comm_link::send_distance_vector(const char * msg, int socketfd, vector<strin
         perror("sendto failed: ");
         return -1;
     }
-    cout << this->name << " sent a vector!" << endl;
+    cout << "\n\n&&&&&&&&&&&&&&&\nFinished sending to " << this->name << endl << endl;
     return 0;
 }
 
@@ -115,6 +121,33 @@ void comm_link::rescind_(vector<string> &list)
     }
     return;
 }
+
+
+int comm_link::record_time()
+{
+    if(time(&(this->last_message_received_at_time)) < 0)
+    {
+        return -1;
+    }
+    return 0;
+}
+
+bool comm_link::is_dead()
+{
+    time_t now;
+    time(&now);
+    if(difftime(now, this->last_message_received_at_time) <= 30)
+    {
+        cout << "\n\n*****************************\n" 
+        << this->name << " is NOT dead yet :)\n********************\n\n";
+        return false;
+        //is dead
+    }
+    cout << "\n\n*****************************\n" 
+    << this->name << " is dead X(\n********************\n\n";
+    return true;
+}
+
 
 //debug
 void comm_link::print_out() {
