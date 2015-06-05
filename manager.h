@@ -32,6 +32,11 @@ class manager
         //helper function: returns a comm_link object pointer that given the name
         comm_link* get_comm_link(std::string name);
         char* convert_string_to_char(std::string data);
+        int reset_how_many_times_told_dead_on(std::string comm_link_name);
+        int add_to_how_many_times_told_dead_on(std::string comm_link_name);
+        int get_how_many_times_dead(std::string comm_link_name);
+        int increase_how_many_times_told_dead_on(std::string comm_link_name);
+
 
         //find comm_linkf for data delivering
         comm_link* next_hop(std::string dest_node);
@@ -55,6 +60,8 @@ class manager
         bool table_has_changed;
         int recommunicate;
         struct sockaddr_in got_from;
+        std::map<std::string, int> how_many_times_told_dead_on;
+
 };
 
 
