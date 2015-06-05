@@ -18,6 +18,7 @@ public:
     comm_link(char * n, int c, int neighbors_prt);
     //setters 
     void set_neighbors_port(int port);
+    bool is_dead();
     //getters
     std::string get_name();
     int get_cost();
@@ -26,6 +27,7 @@ public:
     int send_distance_vector(const char * msg, int socketfd, std::vector<std::string> table_sent);
     //random helper functions
     void register_(std::vector<std::string> &list);
+    int record_time();
     //debug
     void print_out();
     void rescind_(std::vector<std::string> &list);
@@ -34,6 +36,7 @@ private:
     int cost;
     int neighbors_port; //A,B,10001,3
     struct sockaddr_in neighbors_side;
+    time_t last_message_received_at_time;
 };
 
 
