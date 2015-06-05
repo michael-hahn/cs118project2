@@ -14,6 +14,8 @@
 
 using namespace std;
 
+#define BIG_NUMBER 1000000
+
 //Terminology note: Main router will refer to the router that the running process is maintaining, and all other routers
 //are referred to as neighbors
 
@@ -261,18 +263,28 @@ string manager::collect_()
     n=recvfrom(this->my_socketfd,recvline,10000,0,(struct sockaddr *)&(this->got_from), &len);
     if(n < 0)
     {
-        cout << "Error receiving datagram " << endl;
+        cerr << "Error receiving datagram " << endl;
         perror("");
         return "";
     }
     recvline[n]=0;
-    //printf("%s has received: ",this->main_router);
-    //printf("%s", recvline);
+    for (vector<comm_link>::iterator it = this->comm_links.begin(); it != this->comm_links.end(); it++)
+    {
+        if (htons(it->get_port()) == this->got_from.sin_port)
+        {
+            if(it->record_time() < 0)
+            {
+                cerr << endl << "=:=Problem recoding the time for "<< it->get_name() << " =:=" << endl;
+            }
+        }
+    }
+    printf("\n\n%s has received: ",this->main_router);
     string s;
     for (int i = 0; i < n; i++) 
     {
         s += recvline[i];
     }
+    cout << s << endl <<endl;
     return s;
 }
 
@@ -283,17 +295,20 @@ int manager::communicate()
         cerr << "You can not communicate with your neighbors if you have not gotten a socket and bound it" << endl;
         return -1;
     }
-    vector<comm_link> bad_links;
+
+    bool first_time_record_time;
+
+    // vector<comm_link> bad_links;
     vector<string> table_sent;
     //while there are still communication links that need to be used for introductions
     while(true)
     {
         if (this->recommunicate == 5) 
         {
-            cout << "Setting table_has_changed to true and clearing the table_sent vector.\n";
             this->table_has_changed = true;
             table_sent.clear();
             this->recommunicate = 0;
+            cout << "\n\nrecommunicate reset...\n\n";
         }
         string the_msg = create_message(this->dv_table);
         //send messages from the main router to the neighbors = for each neighbor send a message
@@ -301,18 +316,12 @@ int manager::communicate()
         {
             for (vector<comm_link>::iterator it = this->comm_links.begin(); it != this->comm_links.end(); it++) 
             {
-                cerr << endl << "*******************************************************************" << endl;
                 int rv = it->send_distance_vector(the_msg.c_str(), this->my_socketfd, table_sent);
                 //register as acquainted, meaning that there is no need, for now to send a message in the near future
                 if (rv == 0)
                 {
                     it->register_(table_sent);
-                    cerr << "The table_sent now has the following members: ";
-                    for (int i = 0; i < table_sent.size(); ++i) {
-                        cerr << table_sent[i] << " ";
-                    }
                 }
-                cerr << endl << "*******************************************************************" << endl;
             }
         }
         //receive messages
@@ -322,7 +331,7 @@ int manager::communicate()
             return -1;
         }
         //2.Poll
-        for(int j = 0; j < 15; ++j)
+        for(int j = 0; j < 10; ++j)
         {
             pollfd * sockets_to_poll_pointer = &sockets_to_poll[0];
             if(sockets_to_poll_pointer == NULL) //error checking
@@ -336,16 +345,129 @@ int manager::communicate()
             int poll_return_value = 0;
             int time_in_seconds = 3; //Integers only, no 3.5 seconds or anything like that 
             poll_return_value = poll(sockets_to_poll_pointer, sockets_to_poll.size(), time_in_seconds * 1000);
+            
+            if(first_time_record_time)
+            {
+                for(vector<comm_link>::iterator it = this->comm_links.begin(); it != this->comm_links.end(); ++it)
+                {
+                    if(it->record_time() < 0)
+                    {
+                        cerr << "Trouble recording the time for " << it->get_name() << endl << endl; 
+                    }
+                }
+                first_time_record_time = false;
+            }
+
             if(poll_return_value < 0) //error checking
             {
                 cerr << "Poll returned a negative value indicating the following error: " << endl;
                 perror("");
                 cerr<< "Will now continue the manager::communicate function." << endl;
+                for(vector<comm_link>::iterator it = this->comm_links.begin(); it != this->comm_links.end(); ++it)
+                {
+                    if(it->is_dead()) //checking the pulse and seeing that someone is not dead
+                            //resets the how_many_times_dead counter in the comm_link class instance
+                    {
+                        cerr << "\n*****************************\n" << it->get_name() 
+                        << " has died\n**************************\n" << endl << endl;
+                        //let everyone know
+                        if(this->get_how_many_times_dead(it->get_name()) < 0)
+                        {
+                            this->add_to_how_many_times_told_dead_on(it->get_name());
+                            cout << "\n\n())))))))))))))))))\n\n" << "Just added " << it->get_name() << " to the map with value " <<
+                            this->get_how_many_times_dead(it->get_name()) << "\n)((((((((((((((((((((\n\n";
+
+                        }
+
+                        cout << endl << endl << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl; 
+                        printf("%s", this->main_router);
+                        cout << " has told on " << it->get_name() << " " <<this->get_how_many_times_dead(it->get_name()) << " times\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" << endl;
+                        if(this->get_how_many_times_dead(it->get_name()) < 4)
+                        {
+                            string obituary = "^";
+                            obituary += it->get_name();
+                            for(vector<comm_link>::iterator itt = this->comm_links.begin(); itt != this->comm_links.end(); ++itt)
+                            {
+                                if(it->get_name() != itt->get_name())
+                                {
+                                    vector<string> dummy;
+                                    cout << endl << endl << "*****************************" <<endl;
+                                    printf("%s", this->main_router);
+                                    cout << " wants to tell " << itt->get_name() << " that " << it->get_name() << " died " << "\n********************" << endl << endl;
+                                    int rv = itt->send_distance_vector(obituary.c_str(), this->my_socketfd, dummy);
+                                    //register as acquainted, meaning that there is no need, for now to send a message in the near future
+                                    if (rv != 0)
+                                    {
+                                        cerr << "Couldn't send obituary :(\n\n";
+                                    }
+                                }
+                            }
+                            this->increase_how_many_times_told_dead_on(it->get_name());
+                            cout << "\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\nNow, " << it->get_name() << " has the value " 
+                            << this->get_how_many_times_dead(it->get_name()) 
+                            << " for the amount of times  it has gotton told on\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n";
+                        }
+                    }
+                    else
+                    {
+                        this->reset_how_many_times_told_dead_on(it->get_name());
+                    }
+                }
                 break;
             }
             else if(poll_return_value == 0)
             {
                 cout << "Time out occured after " << time_in_seconds <<" seconds, going to try sending messages to neighbors again...\n";
+                for(vector<comm_link>::iterator it = this->comm_links.begin(); it != this->comm_links.end(); ++it)
+                {
+                    if(it->is_dead()) //checking the pulse and seeing that someone is not dead
+                            //resets the how_many_times_dead counter in the comm_link class instance
+                    {
+                        cerr << "\n*****************************\n" << it->get_name() 
+                        << " has died\n**************************\n" << endl << endl;
+                        //let everyone know
+                        if(this->get_how_many_times_dead(it->get_name()) < 0)
+                        {
+                            this->add_to_how_many_times_told_dead_on(it->get_name());
+                            cout << "\n\n())))))))))))))))))\n\n" << "Just added " << it->get_name() << " to the map with value " <<
+                            this->get_how_many_times_dead(it->get_name()) << "\n)((((((((((((((((((((\n\n";
+
+                        }
+                        cout << endl << endl << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl; 
+                        printf("%s", this->main_router);
+                        cout << " has told on " << it->get_name() << this->get_how_many_times_dead(it->get_name()) << " times\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" << endl;
+                        
+                        if(this->get_how_many_times_dead(it->get_name()) < 4)
+                        {
+                            string obituary = "^";
+                            obituary += it->get_name();
+                            for(vector<comm_link>::iterator itt = this->comm_links.begin(); itt != this->comm_links.end(); ++itt)
+                            {
+                                if(it->get_name() != itt->get_name())
+                                {
+                                    vector<string> dummy;
+                                    cout << endl << endl << "*****************************" <<endl;
+                                    printf("%s\n", this->main_router);
+                                    cout << " wants to tell " << itt->get_name() << " that " << it->get_name() << " died " << "\n********************" << endl << endl;
+                                    int rv = itt->send_distance_vector(obituary.c_str(), this->my_socketfd, dummy);
+                                    //register as acquainted, meaning that there is no need, for now to send a message in the near future
+                                    if (rv != 0)
+                                    {
+                                        cerr << "Couldn't send obituary :(\n\n";
+                                    }
+                                }
+                            }
+                            this->increase_how_many_times_told_dead_on(it->get_name());
+                            cout << "\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\nNow, " << it->get_name() << " has the value " 
+                            << this->get_how_many_times_dead(it->get_name()) 
+                            << " for the amount of times  it has gotton told on\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n";
+                        }
+                    }
+                    else
+                    {
+                        this->reset_how_many_times_told_dead_on(it->get_name());
+                    }
+                }
                 break;
             }
             else
@@ -356,6 +478,55 @@ int manager::communicate()
                 {
                     //next, let that communication link collect whatever is waiting on its socket
                     string data = this->collect_();
+                    for(vector<comm_link>::iterator it = this->comm_links.begin(); it != this->comm_links.end(); ++it)
+                    {
+                        if(it->is_dead()) //checking the pulse and seeing that someone is not dead
+                                //resets the how_many_times_dead counter in the comm_link class instance
+                        {
+                            cerr << "\n*****************************\n" << it->get_name() 
+                            << " has died\n**************************\n" << endl << endl;
+                            //let everyone know
+                            if(this->get_how_many_times_dead(it->get_name()) < 0)
+                            {
+                                this->add_to_how_many_times_told_dead_on(it->get_name());
+                                cout << "\n\n())))))))))))))))))\n\n" << "Just added " << it->get_name() << " to the map with value " <<
+                                this->get_how_many_times_dead(it->get_name()) << "\n)((((((((((((((((((((\n\n";
+                            }
+                            cout << endl << endl << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl; 
+                            printf("%s", this->main_router);
+                            cout << " has told on " << it->get_name() << this->get_how_many_times_dead(it->get_name()) << " times\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" << endl;
+                            
+                            if(this->get_how_many_times_dead(it->get_name()) < 4)
+                            {
+                                string obituary = "^";
+                                obituary += it->get_name();
+                                for(vector<comm_link>::iterator itt = this->comm_links.begin(); itt != this->comm_links.end(); ++itt)
+                                {
+                                    if(it->get_name() != itt->get_name())
+                                    {
+                                        vector<string> dummy;
+                                        cout << endl << endl << "*****************************" <<endl;
+                                        printf("%s\n", this->main_router);
+                                        cout << " wants to tell " << itt->get_name() << " that " << it->get_name() << " died " << "********************" << endl << endl;
+                                        int rv = itt->send_distance_vector(obituary.c_str(), this->my_socketfd, dummy);
+                                        //register as acquainted, meaning that there is no need, for now to send a message in the near future
+                                        if (rv != 0)
+                                        {
+                                            cerr << "Couldn't send obituary :(\n\n";
+                                        }
+                                    }
+                                }
+                                this->increase_how_many_times_told_dead_on(it->get_name());
+                                cout << "\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\nNow, " << it->get_name() << " has the value " 
+                                << this->get_how_many_times_dead(it->get_name()) 
+                                << " for the amount of times  it has gotton told on\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n";
+                            }
+                        }
+                        else
+                        {
+                            this->reset_how_many_times_told_dead_on(it->get_name());
+                        }
+                    }
                     if(data == "") //error checking
                     {
                         cerr << "Something went wrong trying to collect the vector from neighbors..." << endl
@@ -404,6 +575,97 @@ int manager::communicate()
                             }
                         }
                     }
+                    else if(data[0] == '^')
+                    {
+                        bool prit = false;
+                        string dead_node;
+                        if (data[1] == ' ')
+                        {
+                            cerr << endl << endl << "Wrong format!: " << data << endl << endl;
+                        }
+                        else
+                        {
+                            int pos = 1;
+                            int data_size = data.length();
+                            for (int j = pos; j < data_size; ++j)
+                            {
+                                dead_node += data[pos];
+                                pos++;
+                            }
+                            for (map<string, pair<string, int> >::iterator itt = this->dv_table.begin(); itt != this->dv_table.end(); ++itt)
+                            {
+                                if ((itt->first == dead_node || itt->second.first == dead_node) && itt->second.second < BIG_NUMBER)
+                                {
+                                    prit = true;
+                                    itt->second.second = BIG_NUMBER;
+                                }
+                            }
+
+                            for(vector<comm_link>::iterator it = this->comm_links.begin(); it != this->comm_links.end(); ++it)
+                            {
+                                cerr << "\n*****************************\n" << dead_node 
+                                << " has died\n**************************\n" << endl << endl;
+                                //let everyone know
+                                if(this->get_how_many_times_dead(dead_node) < 0)
+                                {
+                                    this->add_to_how_many_times_told_dead_on(dead_node);
+
+                                }
+
+                                if(this->get_how_many_times_dead(dead_node) < 4)
+                                {
+                                    string obituary = "^";
+                                    obituary += dead_node;
+                                    for(vector<comm_link>::iterator itt = this->comm_links.begin(); itt != this->comm_links.end(); ++itt)
+                                    {
+                                        if(dead_node != itt->get_name())
+                                        {
+                                            vector<string> dummy;
+                                            int rv = itt->send_distance_vector(obituary.c_str(), this->my_socketfd, dummy);
+                                            //register as acquainted, meaning that there is no need, for now to send a message in the near future
+                                            if (rv == 0)
+                                            {
+                                                cerr << "Couldn't send obituary :(\n\n";
+                                            }
+                                        }
+                                    }
+                                    this->increase_how_many_times_told_dead_on(dead_node);
+                                }
+                            }
+                            
+                            ofstream file_to_print (this->main_router_output_file_name.c_str(), ios::out | ios::app);
+                            if(file_to_print.is_open())
+                            {
+                                string get_info_from;
+                                for (vector<comm_link>::iterator wit = this->comm_links.begin(); wit != this->comm_links.end(); ++wit)
+                                {
+                                    if (this->got_from.sin_port == htons(wit->get_port()))
+                                    {
+                                        get_info_from = wit->get_name();
+                                        break;
+                                    }
+                                }
+                                // file_to_print << "Router " << this->main_router << " knows that " << dead_node << " is dead!" 
+                                // << "from the message sent from Router " << get_info_from << endl;
+                                // file_to_print << "So the entries that contain " << dead_node << " are updated as:" << endl;
+                                // for (map<string, pair<string, int> >::iterator itt = this->dv_table.begin(); itt != this->dv_table.end(); ++itt)
+                                // {
+                                //     if (itt->first == dead_node || itt->second.first == dead_node)
+                                //     {
+                                //         file_to_print << endl << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+                                //         file_to_print << itt->first << "      " << itt->second.first << "         " << itt->second.second << endl;
+                                //     }
+                                // }
+                                // file_to_print << "Here is the dv_table after the death is known..." << endl;
+                                // file_to_print << endl << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+
+                            }
+                            if (prit)
+                            {
+                                print_dv_table();
+                            }
+                        }
+                    }
                     else 
                     {
                         //next, let that link instance process the data that just came in
@@ -443,6 +705,8 @@ int manager::process_distance_vector(string data)
 {
     //first parse the data message
     //int length = (int)data.length();
+    vector<string> dest_v;
+    vector<int> cost_v;
     this->table_has_changed = false;
     string src;
     string destination;
@@ -478,6 +742,7 @@ int manager::process_distance_vector(string data)
         }
         else if (count % 2 == 1) {  //odd number afterwards = destination
             destination = input;
+            dest_v.push_back(destination);
             pear ++;
             // cerr << "The destination is: " << destination << endl;
             // cerr << "Pair number is: " << pear << endl; 
@@ -485,6 +750,7 @@ int manager::process_distance_vector(string data)
         else {  //count % 2 == 0 -> even number afterwards = cost
             s_cost = input;
             cost = atoi(s_cost.c_str());
+            cost_v.push_back(cost);
             pear ++;
             // cerr << "The cost is: " << cost << endl;
             // cerr << "Pair number is now: " << pear << endl;
@@ -502,7 +768,10 @@ int manager::process_distance_vector(string data)
                 // cerr << "No destination node found in the current table" << endl;
                 comm_link* link = this->get_comm_link(src);
                 if (link == NULL)
+                {
+                    cerr << "Get the comm_link failed" << endl;
                     return -1;
+                }
                 int new_link_cost = link->get_cost();
                 new_link_cost += cost;
                 
@@ -545,20 +814,98 @@ int manager::process_distance_vector(string data)
                         //print_dv_table();
                     }
                 }
+                if (cost >= BIG_NUMBER && curr_link_cost < BIG_NUMBER)
+                {
+                    print_dv_table();
+                }
             }
             pear = 0;
             destination = "";
             s_cost = "";
-            // cerr << "ready for the next pair" << endl << endl;
+            cerr << "ready for the next pair" << endl << endl;
         }
         count ++;
         input = "";
     } 
     if (table_has_changed)
     {
+        ofstream file_to_print (this->main_router_output_file_name.c_str(), ios::out | ios::app);
+        if(file_to_print.is_open())
+        {
+            file_to_print << "The DV table we received from " << src << endl; 
+            file_to_print << "******************************" << endl;
+            file_to_print << "Destination        cost       " << endl;
+            int vec_size = dest_v.size();
+            for (int i = 0; i < vec_size; ++i)
+            {
+                if (cost_v[i] < BIG_NUMBER)
+                {
+                    file_to_print << dest_v[i] << "                  " << cost_v[i] << endl;
+                }
+                else 
+                {
+                    file_to_print << dest_v[i] << "                  " << "INF" << endl;
+                }
+            }
+        }
+        file_to_print << "******************************" << endl << endl;
+        file_to_print << "The following is the resulting table after update:" << endl;
         print_dv_table();
-    }  
+    } 
+    return 0; 
 }
+
+
+//functions for accounting who we have notified their death on behalf of
+int manager::increase_how_many_times_told_dead_on(string comm_link_name)
+{
+    for(map<string,int>::iterator iter = this->how_many_times_told_dead_on.begin(); iter != this->how_many_times_told_dead_on.end(); ++iter)
+    {
+        if(iter->first == comm_link_name)
+        {
+            iter->second++;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int manager::get_how_many_times_dead(string comm_link_name)
+{
+    for(map<string,int>::iterator iter = this->how_many_times_told_dead_on.begin(); iter != this->how_many_times_told_dead_on.end(); ++iter)
+    {
+        if(iter->first == comm_link_name)
+        {
+            return iter->second;
+        }
+    }
+    return -1;
+}
+
+int manager::add_to_how_many_times_told_dead_on(string comm_link_name)
+{
+    if(this->get_how_many_times_dead(comm_link_name) == -1)
+    {
+        this->how_many_times_told_dead_on.insert(pair<string,int>(comm_link_name, 0));
+        return 0;
+    }
+    return -1;
+}
+
+int manager::reset_how_many_times_told_dead_on(string comm_link_name)
+{
+    for(map<string,int>::iterator iter = this->how_many_times_told_dead_on.begin(); iter != this->how_many_times_told_dead_on.end(); ++iter)
+    {
+        if(iter->first == comm_link_name)
+        {
+            iter->second = 0;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+
 
 char* manager::convert_string_to_char(string data) 
 {
@@ -574,7 +921,6 @@ int manager::print_dv_table()
 {
     //printing out the DV table to the proprietary file belonging to this router
 
-    //SD + XH starts here
     // string my_name = "routing-output" + this->main_router_output_file_name + ".txt";
     ofstream file_to_print (this->main_router_output_file_name.c_str(), ios::out | ios::app);
     if(file_to_print.is_open())
@@ -584,10 +930,20 @@ int manager::print_dv_table()
         file_to_print << "====================================" << endl;
         file_to_print << "Destination     First Hop     Cost" << endl;
         for ( map<string,pair<string,int> >::iterator it = dv_table.begin(); it != dv_table.end(); it++) {
-            file_to_print << it->first << "              " << it->second.first << "              " << it->second.second << endl;
+            if (it->second.second < BIG_NUMBER)
+            {
+                file_to_print << it->first << "              " << 
+                it->second.first << "              " << it->second.second << endl;
+            }
+            else 
+            {
+                file_to_print << it->first << "              " <<
+                it->second.first << "              " << "INF" << endl;
+            }
+
         }
         
-        file_to_print << "====================================" << endl;
+        file_to_print << "====================================" << endl << endl;
         file_to_print.close();
     }
     else
@@ -664,10 +1020,10 @@ int manager::data_path_info(comm_link* next_hop, string data)
             file_to_print << "Destination node is " <<  string_version_of_name << endl;   
         }
         file_to_print << "UDP port in which the packet arrived: " << this->my_port << endl;
-        file_to_print << "UDP source port along which the packet was forwarded: " << source_port_number << endl;
+        file_to_print << "UDP source port along which the packet was forwarded: " << source_port_number << endl << endl;
         if (next_hop == NULL)
         {
-            file_to_print << data << endl;
+            file_to_print << data << endl << endl;
         }
         return 0;
     }
